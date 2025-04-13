@@ -97,19 +97,37 @@ export default function Home() {
 
   useEffect(() => {
     const fetchStations = async () => {
-      const mockFileContent = `
-      stream_data[9]: "https://radio.truckers.fm/|TruckersFM|Sim radio|EN|320|1"
-      stream_data[10]: "http://stream.simulatorradio.com:8002/stream.mp3|Simulator Radio|Sim radio|EN|128|1"
-      `;
-      const ets2Data = await getRadioStations("ETS2", mockFileContent);
-      const atsData = await getRadioStations("ATS", mockFileContent);
+      try {
+        // Fetch ETS2 stations
+        const ets2Response = await fetch('/data/ETS2_live_streams.sii');
+        if (!ets2Response.ok) {
+          throw new Error(`Failed to fetch ETS2 stations: ${ets2Response.statusText}`);
+        }
+        const ets2FileContent = await ets2Response.text();
+        const ets2Data = await getRadioStations("ETS2", ets2FileContent);
+        setEts2Stations(ets2Data);
 
-      setEts2Stations(ets2Data);
-      setAtsStations(atsData);
+        // Fetch ATS stations
+        const atsResponse = await fetch('/data/ATS_live_streams.sii');
+         if (!atsResponse.ok) {
+          throw new Error(`Failed to fetch ATS stations: ${atsResponse.statusText}`);
+        }
+        const atsFileContent = await atsResponse.text();
+        const atsData = await getRadioStations("ATS", atsFileContent);
+        setAtsStations(atsData);
+
+      } catch (error) {
+        console.error("Error fetching or parsing station data:", error);
+        toast({
+          title: "Error loading stations",
+          description: "Could not load radio station data. Please check the console for details.",
+          variant: "destructive",
+        });
+      }
     };
 
     fetchStations();
-  }, []);
+  }, [toast]); // Add toast to dependency array
 
   useEffect(() => {
     if (audioRef.current) {

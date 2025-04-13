@@ -13,8 +13,9 @@ import { Slider } from "@/components/ui/slider";
 
 interface PlayerProps {
   activeStation: RadioStation | null;
+  activeGame: Game | null;
   isPlaying: boolean;
-  onPlay: (station: RadioStation) => void;
+  onPlay: (station: RadioStation, game: Game) => void;
   onStop: () => void;
   onPrev: () => void;
   onNext: () => void;
@@ -25,6 +26,7 @@ interface PlayerProps {
 
 const Player: React.FC<PlayerProps> = ({
   activeStation,
+  activeGame,
   isPlaying,
   onPlay,
   onStop,
@@ -43,7 +45,7 @@ const Player: React.FC<PlayerProps> = ({
           {activeStation ? (
             <div>
               <h2 className="text-lg font-semibold">{activeStation.name}</h2>
-              <p className="text-sm text-muted-foreground">{activeStation.genre}</p>
+              <p className="text-sm text-muted-foreground">{activeStation.genre} ({activeGame})</p>
             </div>
           ) : (
             <p className="text-muted-foreground">No station selected</p>
@@ -54,7 +56,7 @@ const Player: React.FC<PlayerProps> = ({
           <Button variant="ghost" size="icon" onClick={onPrev} disabled={!activeStation}>
             <SkipBack className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon" onClick={activeStation ? (isPlaying ? onStop : () => onPlay(activeStation)) : null} disabled={!activeStation}>
+          <Button variant="ghost" size="icon" onClick={activeStation ? (isPlaying ? onStop : () => onPlay(activeStation, activeGame!)) : null} disabled={!activeStation}>
             {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}
           </Button>
           <Button variant="ghost" size="icon" onClick={onNext} disabled={!activeStation}>
@@ -85,6 +87,7 @@ export default function Home() {
   const [ets2Stations, setEts2Stations] = useState<RadioStation[]>([]);
   const [atsStations, setAtsStations] = useState<RadioStation[]>([]);
   const [activeStation, setActiveStation] = useState<RadioStation | null>(null);
+  const [activeGame, setActiveGame] = useState<Game | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [audio, setAudio] = useState<HTMLAudioElement | null>(null);
@@ -114,7 +117,7 @@ export default function Home() {
     }
   }, [volume]);
 
-  const handlePlay = (station: RadioStation) => {
+  const handlePlay = (station: RadioStation, game: Game) => {
     if (audioRef.current) {
       audioRef.current.pause();
     }
@@ -126,6 +129,7 @@ export default function Home() {
     newAudio.play();
     setIsPlaying(true);
     setActiveStation(station);
+    setActiveGame(game);
 
     toast({
       title: "Playing Station",
@@ -138,6 +142,7 @@ export default function Home() {
       audioRef.current.pause();
       setIsPlaying(false);
       setActiveStation(null);
+      setActiveGame(null);
     }
   };
 
@@ -146,7 +151,9 @@ export default function Home() {
     if (!activeStation) return;
     const currentIndex = allStations.findIndex((station) => station.streamUrl === activeStation.streamUrl);
     const prevIndex = (currentIndex - 1 + allStations.length) % allStations.length;
-    handlePlay(allStations[prevIndex]);
+    const prevStation = allStations[prevIndex];
+    const game = ets2Stations.includes(prevStation) ? 'ETS2' : 'ATS';
+    handlePlay(prevStation, game);
   };
 
   const handleNext = () => {
@@ -154,14 +161,18 @@ export default function Home() {
     if (!activeStation) return;
     const currentIndex = allStations.findIndex((station) => station.streamUrl === activeStation.streamUrl);
     const nextIndex = (currentIndex + 1) % allStations.length;
-    handlePlay(allStations[nextIndex]);
+     const nextStation = allStations[nextIndex];
+    const game = ets2Stations.includes(nextStation) ? 'ETS2' : 'ATS';
+    handlePlay(nextStation, game);
   };
 
   const handleRandom = () => {
     const allStations = [...ets2Stations, ...atsStations];
     if (allStations.length > 0) {
       const randomIndex = Math.floor(Math.random() * allStations.length);
-      handlePlay(allStations[randomIndex]);
+      const randomStation = allStations[randomIndex];
+      const game = ets2Stations.includes(randomStation) ? 'ETS2' : 'ATS';
+      handlePlay(randomStation, game);
     }
   };
 
@@ -201,7 +212,7 @@ export default function Home() {
           <ScrollArea className="h-[400px] w-full rounded-md border">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
               {filteredEts2Stations.map((station) => (
-                  <Button variant="ghost" className="w-full" onClick={() => handlePlay(station)}>{station.name}</Button>
+                  <Button variant="ghost" className="w-full" onClick={() => handlePlay(station, 'ETS2')}>{station.name}</Button>
               ))}
             </div>
           </ScrollArea>
@@ -210,7 +221,7 @@ export default function Home() {
           <ScrollArea className="h-[400px] w-full rounded-md border">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
               {filteredAtsStations.map((station) => (
-                  <Button variant="ghost" className="w-full" onClick={() => handlePlay(station)}>{station.name}</Button>
+                  <Button variant="ghost" className="w-full" onClick={() => handlePlay(station, 'ATS')}>{station.name}</Button>
               ))}
             </div>
           </ScrollArea>
@@ -219,6 +230,7 @@ export default function Home() {
 
       <Player
         activeStation={activeStation}
+        activeGame={activeGame}
         isPlaying={isPlaying}
         onPlay={handlePlay}
         onStop={handleStop}

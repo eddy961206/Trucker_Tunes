@@ -43,11 +43,18 @@ export async function getRadioStations(game: Game, fileContent: string): Promise
 
   return [
     {
-      name: 'Example Station',
-      streamUrl: 'http://example.com/stream',
-      genre: 'Pop',
-      language: 'English',
-      bitrate: '128kbps',
+      name: 'TruckersFM',
+      streamUrl: 'https://radio.truckers.fm/',
+      genre: 'Sim radio',
+      language: 'EN',
+      bitrate: '320',
+    },
+    {
+      name: 'Simulator Radio',
+      streamUrl: 'http://stream.simulatorradio.com:8002/stream.mp3',
+      genre: 'Sim radio',
+      language: 'EN',
+      bitrate: '128',
     },
   ];
 }

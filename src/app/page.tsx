@@ -826,8 +826,7 @@ const SavedSongsList: React.FC<SavedSongsListProps> = ({ songs, onDeleteSong }) 
   // 외부 검색 링크 생성 함수
   const getSearchUrl = (song: SavedSong): string => {
       const query = encodeURIComponent(`${song.artist || ''} ${song.title}`);
-      // YouTube Music 검색 URL 예시
-      return `https://music.youtube.com/search?q=${query}`;
+      return `https://www.youtube.com/results?search_query=${query}`;
   };
 
   return (

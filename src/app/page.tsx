@@ -204,29 +204,61 @@ export default function Home() {
 
   const allStations = useMemo(() => [...ets2Stations, ...atsStations], [ets2Stations, atsStations]);
 
+  // 이전 곡 (항상 전체 목록 기준 순환)
   const handlePrevStation = useCallback(() => {
+    // 1. 기본 확인: 현재 재생 스테이션과 전체 목록 존재 여부
     if (!activeStation || allStations.length === 0) return;
-    const currentList = activeGame === 'ETS2' ? ets2Stations : activeGame === 'ATS' ? atsStations : allStations;
-    let currentIndex = currentList.findIndex(s => s.streamUrl === activeStation.streamUrl);
-    if (currentIndex === -1) currentIndex = allStations.findIndex(s => s.streamUrl === activeStation.streamUrl);
-    if (currentIndex === -1) return;
-    const prevIndex = (currentIndex - 1 + allStations.length) % allStations.length;
-    const prevStation = allStations[prevIndex];
-    const game = ets2Stations.some(s => s.streamUrl === prevStation.streamUrl) ? 'ETS2' : 'ATS';
-    playStation(prevStation, game);
-  }, [activeStation, activeGame, ets2Stations, atsStations, allStations, playStation]);
 
+    // 2. 전체 목록(allStations)에서 현재 스테이션 인덱스 찾기
+    const currentIndex = allStations.findIndex(s => s.streamUrl === activeStation.streamUrl);
+
+    // 3. 못 찾으면 중단 (이론상 발생하면 안 됨)
+    if (currentIndex === -1) {
+      console.error("Error: Active station not found in all stations list.");
+      return;
+    }
+
+    // 4. 전체 목록 기준으로 이전 인덱스 계산
+    const prevIndex = (currentIndex - 1 + allStations.length) % allStations.length;
+
+    // 5. 전체 목록에서 이전 스테이션 가져오기
+    const prevStation = allStations[prevIndex];
+
+    // 6. 이전 스테이션의 게임 정보 결정
+    const game = ets2Stations.some(s => s.streamUrl === prevStation.streamUrl) ? 'ETS2' : 'ATS';
+
+    // 7. 이전 스테이션 재생
+    playStation(prevStation, game);
+
+  }, [activeStation, allStations, ets2Stations, playStation]); // 의존성 배열 업데이트
+
+  // 다음 곡 (항상 전체 목록 기준 순환)
   const handleNextStation = useCallback(() => {
+    // 1. 기본 확인: 현재 재생 스테이션과 전체 목록 존재 여부
     if (!activeStation || allStations.length === 0) return;
-    const currentList = activeGame === 'ETS2' ? ets2Stations : activeGame === 'ATS' ? atsStations : allStations;
-    let currentIndex = currentList.findIndex(s => s.streamUrl === activeStation.streamUrl);
-    if (currentIndex === -1) currentIndex = allStations.findIndex(s => s.streamUrl === activeStation.streamUrl);
-    if (currentIndex === -1) return;
+
+    // 2. 전체 목록(allStations)에서 현재 스테이션 인덱스 찾기
+    const currentIndex = allStations.findIndex(s => s.streamUrl === activeStation.streamUrl);
+
+    // 3. 못 찾으면 중단
+    if (currentIndex === -1) {
+        console.error("Error: Active station not found in all stations list.");
+        return;
+    }
+
+    // 4. 전체 목록 기준으로 다음 인덱스 계산
     const nextIndex = (currentIndex + 1) % allStations.length;
+
+    // 5. 전체 목록에서 다음 스테이션 가져오기
     const nextStation = allStations[nextIndex];
+
+    // 6. 다음 스테이션의 게임 정보 결정
     const game = ets2Stations.some(s => s.streamUrl === nextStation.streamUrl) ? 'ETS2' : 'ATS';
+
+    // 7. 다음 스테이션 재생
     playStation(nextStation, game);
-  }, [activeStation, activeGame, ets2Stations, atsStations, allStations, playStation]);
+
+  }, [activeStation, allStations, ets2Stations, playStation]); // 의존성 배열 업데이트
 
   const handleRandomStation = useCallback(() => {
     if (allStations.length === 0) { toast.info("No stations available"); return; }

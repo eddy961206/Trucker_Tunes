@@ -21,93 +21,65 @@ import {
   AlertTriangle,
   Loader2,
   Star,
+  Bookmark, // 곡 저장 아이콘
+  Trash2,   // 삭제 아이콘
+  ExternalLink, // 외부 링크 아이콘
+  ListMusic, // 저장된 곡 탭 아이콘
 } from 'lucide-react';
 import {Slider} from '@/components/ui/slider';
 // getCurrentSong은 actions 파일에서 가져옵니다.
 import {getCurrentSong} from './actions';
 
+// 저장된 곡 타입
+interface SavedSong {
+  id: number; // 타임스탬프 사용
+  title: string;
+  artist?: string; // 파싱 성공 시 저장
+  stationName: string;
+  savedAt: number; // 타임스탬프
+  streamUrl: string; // 원본 스트림 URL (중복 저장 방지 등에 사용 가능)
+}
+
 interface PlayerProps {
   activeStation: RadioStation | null;
   activeGame: Game | null;
   isPlaying: boolean;
-  playStation: (station: RadioStation, game: Game) => void;
+  playStation: (station: RadioStation, game: Game) => void; // playStation 시그니처 유지
   stopStation: () => void;
   handlePrevStation: () => void;
   handleNextStation: () => void;
   handleRandomStation: () => void;
   volume: number;
   setVolume: (volume: number) => void;
-  stations: RadioStation[]; // 전체 스테이션 목록 추가 (이전/다음 버튼 활성화용)
+  stations: RadioStation[];
+  currentSong: string | null; // Home에서 받음
+  isLoadingSong: boolean; // Home에서 받음
+  isSongUnavailable: boolean; // Home에서 받음
+  onSaveSong: () => void; // 저장 버튼 클릭 시 호출될 함수
 }
 
 const Player: React.FC<PlayerProps> = ({
   activeStation,
   activeGame,
   isPlaying,
-  playStation, // playStation 함수 받기
-  stopStation, // stopStation 함수 받기
-  handlePrevStation, // 이전 버튼 핸들러
-  handleNextStation, // 다음 버튼 핸들러
-  handleRandomStation, // 랜덤 버튼 핸들러
+  playStation,
+  stopStation,
+  handlePrevStation,
+  handleNextStation,
+  handleRandomStation,
   volume,
   setVolume,
-  stations, // 전체 스테이션 목록 받기
+  stations,
+  currentSong, // Home에서 전달받음
+  isLoadingSong, // Home에서 전달받음
+  isSongUnavailable, // Home에서 전달받음
+  onSaveSong, // Home에서 전달받음
 }) => {
   const volumeIcon = volume === 0 ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />;
-  const [currentSong, setCurrentSong] = useState<string | null>(null);
-  const [isLoadingSong, setIsLoadingSong] = useState(false);
-  const [isUnavailable, setIsUnavailable] = useState(false); // 정보 없음 상태 추가
 
-  // activeStation이 변경될 때마다 노래 정보를 가져옵니다.
-  useEffect(() => {
-    let isMounted = true; // 컴포넌트 마운트 상태 추적
-
-    const fetchSong = async () => {
-      if (activeStation && activeStation.streamUrl) {
-        setIsLoadingSong(true);
-        setIsUnavailable(false); // 초기화
-        setCurrentSong(null); // 이전 정보 클리어
-        try {
-          // actions.ts의 getCurrentSong 호출
-          const song = await getCurrentSong(activeStation.streamUrl);
-          if (isMounted) {
-            if (song) {
-              setCurrentSong(song);
-              setIsUnavailable(false);
-            } else {
-              setCurrentSong(null);
-              setIsUnavailable(true); // 정보 없음 상태 설정
-            }
-          }
-        } catch (error) {
-          console.error("Error fetching song from Server Action:", error);
-          if (isMounted) {
-            setCurrentSong(null);
-            setIsUnavailable(true); // 에러 발생 시에도 정보 없음으로 간주
-          }
-        } finally {
-          if (isMounted) {
-            setIsLoadingSong(false);
-          }
-        }
-      } else {
-        // activeStation이 없으면 상태 초기화
-        setCurrentSong(null);
-        setIsLoadingSong(false);
-        setIsUnavailable(false);
-      }
-    };
-
-    fetchSong();
-
-    // 컴포넌트 언마운트 시 비동기 작업 취소 (메모리 누수 방지)
-    return () => {
-      isMounted = false;
-    };
-  }, [activeStation]); // activeStation이 바뀔 때만 실행
-
-  // 버튼 비활성화 로직 수정
+  // 버튼 비활성화 로직
   const isControlDisabled = stations.length === 0 || !activeStation;
+  const canSaveSong = !isLoadingSong && currentSong && activeStation; // 저장 가능 조건
 
   return (
     <div className="fixed bottom-0 left-0 w-full bg-secondary/80 backdrop-blur-md border-t border-border z-10 shadow-lg">
@@ -117,26 +89,45 @@ const Player: React.FC<PlayerProps> = ({
           {activeStation ? (
             <div>
               <h2 className="text-lg font-semibold truncate" title={activeStation.name}>{activeStation.name}</h2>
-              <div className="text-sm text-muted-foreground truncate">
-                {/* 노래 정보 표시 */}
-                {isLoadingSong ? (
-                  <span className="flex items-center text-xs">
-                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                    Loading song...
-                  </span>
-                ) : currentSong ? (
-                  <span title={currentSong}>{currentSong}</span>
-                ) : isUnavailable ? (
-                  <span className="flex items-center text-xs text-yellow-600 dark:text-yellow-500">
-                    <AlertTriangle className="h-3 w-3 mr-1 flex-shrink-0" />
-                    Song info not available
-                  </span>
-                ) : (
-                  // 로딩도 아니고, 노래 정보도 없고, unavailable 상태도 아니면 장르 표시 (초기 상태 등)
-                  activeStation.genre
-                )}
-                <span className="mx-1">|</span>
-                <span>{activeGame}</span>
+              {/* 노래 정보 및 저장 버튼 컨테이너 */}
+              <div className="flex items-center gap-2 text-sm text-muted-foreground truncate">
+                 {/* 노래 정보 표시 */}
+                 <span className="flex-grow truncate"> {/* 제목 영역이 늘어나도록 */}
+                    {isLoadingSong ? (
+                    <span className="flex items-center text-xs">
+                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                        Loading...
+                    </span>
+                    ) : currentSong ? (
+                    <span title={currentSong}>{currentSong}</span>
+                    ) : isSongUnavailable ? (
+                    <span className="flex items-center text-xs text-yellow-600 dark:text-yellow-500">
+                        <AlertTriangle className="h-3 w-3 mr-1 flex-shrink-0" />
+                        Info unavailable
+                    </span>
+                    ) : (
+                    activeStation.genre // 기본 정보 (장르)
+                    )}
+                </span>
+
+                {/* 곡 저장 버튼 */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    "h-5 w-5 p-0 flex-shrink-0", // 크기 및 패딩 조절
+                    !canSaveSong && "opacity-50 cursor-not-allowed" // 비활성화 스타일
+                  )}
+                  onClick={onSaveSong}
+                  disabled={!canSaveSong}
+                  title={canSaveSong ? "Save this song" : "Cannot save song"}
+                >
+                  <Bookmark className="h-4 w-4" />
+                </Button>
+
+                {/* 게임 정보 */}
+                <span className="mx-1 flex-shrink-0">|</span>
+                <span className="flex-shrink-0">{activeGame}</span>
               </div>
             </div>
           ) : (
@@ -153,8 +144,8 @@ const Player: React.FC<PlayerProps> = ({
             variant="ghost"
             size="icon"
             onClick={activeStation ? (isPlaying ? stopStation : () => playStation(activeStation, activeGame!)) : undefined}
-            disabled={!activeStation} // 재생/정지 버튼은 스테이션 선택 시에만 활성화
-            className="w-10 h-10" // 버튼 크기 조정
+            disabled={!activeStation}
+            className="w-10 h-10"
           >
             {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}
           </Button>
@@ -202,6 +193,12 @@ export default function Home() {
 
   // 즐겨찾기 상태
   const [favoritedStations, setFavoritedStations] = useState<RadioStation[]>([]);
+  // 저장된 곡 상태 추가
+  const [savedSongs, setSavedSongs] = useState<SavedSong[]>([]);
+  // 현재 곡 정보 상태 (Player에서 Home으로 이동)
+  const [currentSong, setCurrentSong] = useState<string | null>(null);
+  const [isLoadingSong, setIsLoadingSong] = useState(false);
+  const [isSongUnavailable, setIsSongUnavailable] = useState(false);
 
   // 로컬 저장소에서 즐겨찾기 불러오기 (컴포넌트 마운트 시)
   useEffect(() => {
@@ -223,6 +220,24 @@ export default function Home() {
        localStorage.setItem('favoriteStations', JSON.stringify(favoritedStations));
     // }
   }, [favoritedStations]);
+
+  // 로컬 저장소 - 저장된 곡 불러오기/저장하기 (새로 추가)
+  useEffect(() => {
+    const storedSavedSongs = localStorage.getItem('savedSongs');
+    if (storedSavedSongs) {
+      try {
+        setSavedSongs(JSON.parse(storedSavedSongs));
+      } catch (error) {
+        console.error("Failed to parse saved songs from localStorage:", error);
+        localStorage.removeItem('savedSongs');
+      }
+    }
+  }, []);
+  
+  useEffect(() => {
+    localStorage.setItem('savedSongs', JSON.stringify(savedSongs));
+  }, [savedSongs]);
+  
 
   // .sii 파일 로딩
   useEffect(() => {
@@ -275,6 +290,46 @@ export default function Home() {
     }
   }, [volume]);
 
+  // 현재 곡 정보 가져오기 useEffect (Player에서 이동)
+  useEffect(() => {
+    let isMounted = true;
+    const fetchSong = async () => {
+      if (activeStation && activeStation.streamUrl) {
+        setIsLoadingSong(true);
+        setIsSongUnavailable(false);
+        setCurrentSong(null);
+        try {
+          const song = await getCurrentSong(activeStation.streamUrl);
+          if (isMounted) {
+            if (song) {
+              setCurrentSong(song);
+              setIsSongUnavailable(false);
+            } else {
+              setCurrentSong(null);
+              setIsSongUnavailable(true);
+            }
+          }
+        } catch (error) {
+          console.error("Error fetching song from Server Action:", error);
+          if (isMounted) {
+            setCurrentSong(null);
+            setIsSongUnavailable(true);
+          }
+        } finally {
+          if (isMounted) {
+            setIsLoadingSong(false);
+          }
+        }
+      } else {
+        setCurrentSong(null);
+        setIsLoadingSong(false);
+        setIsSongUnavailable(false);
+      }
+    };
+    fetchSong();
+    return () => { isMounted = false; };
+  }, [activeStation]); // activeStation 변경 시 실행  
+
   // 즐겨찾기 토글 함수
   const toggleFavorite = useCallback((stationToToggle: RadioStation) => {
     setFavoritedStations((prevFavorites) => {
@@ -300,9 +355,59 @@ export default function Home() {
     return favoritedStations.some(fav => fav.streamUrl === station.streamUrl);
   }, [favoritedStations]);
 
-  // 재생 함수 (useCallback으로 최적화)
+  // --- 곡 저장 및 삭제 로직 ---
+  const handleSaveSong = useCallback(() => {
+    if (!currentSong || !activeStation) {
+      toast.error("Cannot save song", { description: "No song information available." });
+      return;
+    }
+
+    // 아티스트 - 제목 형식 시도 (예: "Artist Name - Song Title")
+    const parts = currentSong.split(' - ');
+    let title = currentSong;
+    let artist: string | undefined;
+    if (parts.length >= 2) {
+      artist = parts[0].trim();
+      title = parts.slice(1).join(' - ').trim();
+    }
+
+    const newSavedSong: SavedSong = {
+      id: Date.now(), // 간단하게 타임스탬프를 ID로 사용
+      title: title,
+      artist: artist,
+      stationName: activeStation.name,
+      savedAt: Date.now(),
+      streamUrl: activeStation.streamUrl,
+    };
+
+    // 간단한 중복 방지 (같은 곡 제목, 같은 스테이션에서 방금 저장했는지 확인 - 1분 이내)
+    const oneMinuteAgo = Date.now() - 60 * 1000;
+    const alreadyExists = savedSongs.some(song =>
+        song.title === newSavedSong.title &&
+        song.artist === newSavedSong.artist && // 아티스트도 비교
+        song.stationName === newSavedSong.stationName &&
+        song.savedAt > oneMinuteAgo
+    );
+
+    if (alreadyExists) {
+        toast.info("Song already saved recently", { description: `${newSavedSong.title} from ${newSavedSong.stationName}` });
+    } else {
+        setSavedSongs((prev) => [newSavedSong, ...prev]); // 최신 곡을 맨 위에 추가
+        toast.success("Song saved!", { description: `${newSavedSong.title}` });
+    }
+
+  }, [currentSong, activeStation, savedSongs]); // 의존성 배열 업데이트
+
+  const handleDeleteSong = useCallback((idToDelete: number) => {
+    setSavedSongs((prev) => prev.filter((song) => song.id !== idToDelete));
+    toast.info("Saved song removed.");
+  }, []);
+  // --- ---  
+
+  // 재생 함수 (useCallback) - 수정: playStation 시그니처 변경 대응
   const playStation = useCallback(
-    (station: RadioStation, game: Game) => {
+    (station: RadioStation, game: Game | null) => { // game이 null일 수 있음
+      const actualGame = game ?? (ets2Stations.some(s => s.streamUrl === station.streamUrl) ? 'ETS2' : 'ATS');
       // 현재 재생 중인 오디오 중지 및 리소스 정리
       if (audioRef.current) {
         audioRef.current.pause();
@@ -351,8 +456,9 @@ export default function Home() {
           stopStation(); // 클로저를 통해 접근 가능
         });
     },
-    // [volume, stopStation] 에서 stopStation 제거
-    [volume] // 이제 volume만 의존성으로 가집니다.
+    // playStation 의존성 배열 확인 필요
+    [volume, ets2Stations] // ets2Stations 추가 (game 판별용)
+    // stopStation 제거 시 에러났던 부분 해결되었는지 확인 필요 -> playStation 자체에서 stopStation 호출은 괜찮음
   );
 
 
@@ -453,7 +559,16 @@ export default function Home() {
           station.name.toLowerCase().includes(searchQuery.toLowerCase())
       );
   }, [favoritedStations, searchQuery]);
-
+  // 저장된 곡 필터링 (제목, 아티스트, 스테이션 이름 기준)
+  const filteredSavedSongs = useMemo(() => {
+    if (!searchQuery) return savedSongs;
+    const lowerCaseQuery = searchQuery.toLowerCase();
+    return savedSongs.filter(song =>
+        song.title.toLowerCase().includes(lowerCaseQuery) ||
+        (song.artist && song.artist.toLowerCase().includes(lowerCaseQuery)) ||
+        song.stationName.toLowerCase().includes(lowerCaseQuery)
+    );
+  }, [savedSongs, searchQuery]);
 
   // 메인 UI 렌더링
   return (
@@ -508,12 +623,17 @@ export default function Home() {
       {/* 게임 및 즐겨찾기 탭 */}
       {/* 게임 탭 */}
       <Tabs defaultValue="ets2" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="ets2">Euro Truck Simulator 2 ({filteredEts2Stations.length})</TabsTrigger>
           <TabsTrigger value="ats">American Truck Simulator ({filteredAtsStations.length})</TabsTrigger>{/* Favorites 탭 추가 */}
           <TabsTrigger value="favorites">
             <Star className="w-4 h-4 mr-1" /> {/* 별 아이콘 추가 */}
             Favorites ({filteredFavoritedStations.length})
+          </TabsTrigger>
+           {/* Saved Songs 탭 추가 */}
+           <TabsTrigger value="savedSongs">
+            <ListMusic className="w-4 h-4 mr-1" /> {/* 아이콘 변경 */}
+            Saved ({filteredSavedSongs.length})
           </TabsTrigger>
         </TabsList>
 
@@ -539,19 +659,28 @@ export default function Home() {
             />
         </TabsContent>
 
-         {/* Favorites 스테이션 목록 */}
+        {/* Favorites 스테이션 목록 */}
         <TabsContent value="favorites">
            <StationList
-             stations={filteredFavoritedStations} // 필터링된 즐겨찾기 목록 사용
-             game={null} // 즐겨찾기 탭에서는 특정 게임 지정 안 함 (또는 필요 시 로직 추가)
-             onPlay={playStation} // 즐겨찾기에서도 재생 가능
+             stations={filteredFavoritedStations}
+             game={null} // Favorites에서는 game 판별 필요 -> StationList 내부 또는 playStation 호출 시
+             onPlay={playStation} // playStation 호출 시 game 판별
              onToggleFavorite={toggleFavorite}
-             isFavorite={isFavorite} // 즐겨찾기 탭에서는 항상 true 지만 일관성을 위해 전달
+             isFavorite={isFavorite}
+            />
+        </TabsContent>
+
+         {/* Saved Songs 목록 */}
+        <TabsContent value="savedSongs">
+           <SavedSongsList
+                songs={filteredSavedSongs}
+                onDeleteSong={handleDeleteSong}
             />
         </TabsContent>
       </Tabs>
 
-      {/* 하단 플레이어 */}
+      
+      {/* 하단 플레이어: 현재 곡 관련 상태 및 저장 핸들러 전달 */}
       <Player
         activeStation={activeStation}
         activeGame={activeGame}
@@ -563,19 +692,23 @@ export default function Home() {
         handleRandomStation={handleRandomStation}
         volume={volume}
         setVolume={setVolume}
-        stations={allStations} // 전체 스테이션 목록 전달
+        stations={allStations}
+        currentSong={currentSong} // 전달
+        isLoadingSong={isLoadingSong} // 전달
+        isSongUnavailable={isSongUnavailable} // 전달
+        onSaveSong={handleSaveSong} // 전달
       />
     </div>
   );
 }
 
-// 스테이션 목록 컴포넌트 분리 (가독성 향상)
+// StationList 컴포넌트 수정: onPlay 호출 시 game 타입 변경 대응
 interface StationListProps {
   stations: RadioStation[];
-  game: Game;
-  onPlay: (station: RadioStation, game: Game) => void;
-  onToggleFavorite: (station: RadioStation) => void; // 추가
-  isFavorite: (station: RadioStation) => boolean; // 추가
+  game: Game | null;
+  onPlay: (station: RadioStation, game: Game | null) => void; // game: Game | null
+  onToggleFavorite: (station: RadioStation) => void;
+  isFavorite: (station: RadioStation) => boolean;
 }
 
 const StationList: React.FC<StationListProps> = ({ stations, game, onPlay, onToggleFavorite, isFavorite }) => {
@@ -595,15 +728,14 @@ const StationList: React.FC<StationListProps> = ({ stations, game, onPlay, onTog
     <ScrollArea className="h-[45vh] md:h-[50vh] w-full rounded-md border">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 p-4">
         {stations.map((station) => {
-          const favorited = isFavorite(station); // 현재 스테이션 즐겨찾기 여부 확인
-          const stationGame = determineGame(station); // 이 스테이션의 게임 결정
+          const favorited = isFavorite(station);
 
           return (
             <div key={station.streamUrl} className="flex items-center bg-card p-3 rounded-md border group">
               <Button
-                variant="ghost" // 내부 버튼은 ghost로
-                className="flex-grow h-auto justify-start text-left flex flex-col items-start p-0 mr-2" // 패딩 제거, 마진 추가
-                onClick={() => onPlay(station, stationGame)} // 결정된 게임 정보 사용
+                variant="ghost"
+                className="flex-grow h-auto justify-start text-left flex flex-col items-start p-0 mr-2"
+                onClick={() => onPlay(station, game)} // Home에서 받은 game(null일 수 있음) 그대로 전달
                 title={`Play ${station.name}`}
               >
                 <span className="font-semibold truncate w-full">{station.name}</span>
@@ -631,3 +763,75 @@ const StationList: React.FC<StationListProps> = ({ stations, game, onPlay, onTog
     </ScrollArea>
   );
 };
+
+// --- SavedSongsList 컴포넌트 (새로 추가) ---
+interface SavedSongsListProps {
+  songs: SavedSong[];
+  onDeleteSong: (id: number) => void;
+}
+
+const SavedSongsList: React.FC<SavedSongsListProps> = ({ songs, onDeleteSong }) => {
+  if (songs.length === 0) {
+      return <p className="text-muted-foreground p-4 text-center">No saved songs yet. Use the bookmark icon in the player to save songs you like!</p>;
+  }
+
+  // 날짜 포맷 함수 (옵션)
+  const formatDate = (timestamp: number) => {
+      return new Date(timestamp).toLocaleString(undefined, {
+          year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+      });
+  };
+
+  // 외부 검색 링크 생성 함수
+  const getSearchUrl = (song: SavedSong): string => {
+      const query = encodeURIComponent(`${song.artist || ''} ${song.title}`);
+      // YouTube Music 검색 URL 예시
+      return `https://music.youtube.com/search?q=${query}`;
+  };
+
+  return (
+      <ScrollArea className="h-[60vh] md:h-[65vh] w-full rounded-md border"> {/* 높이 조정 */}
+          <div className="p-4 space-y-3">
+              {songs.map((song) => (
+                  <div key={song.id} className="flex items-center gap-3 bg-card p-3 rounded-md border">
+                      <div className="flex-grow min-w-0">
+                          <p className="font-semibold truncate" title={song.artist ? `${song.artist} - ${song.title}` : song.title}>
+                              {song.artist && <span className="font-normal text-muted-foreground">{song.artist} - </span>}
+                              {song.title}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                              Saved from <span className="font-medium">{song.stationName}</span> on {formatDate(song.savedAt)}
+                          </p>
+                      </div>
+                       {/* 외부 검색 링크 버튼 */}
+                      <a
+                          href={getSearchUrl(song)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Search on YouTube Music"
+                          className={cn(
+                              buttonVariants({ variant: "ghost", size: "icon" }),
+                              "flex-shrink-0 h-8 w-8" // 크기 조절
+                          )}
+                      >
+                          <ExternalLink className="h-4 w-4" />
+                      </a>
+                       {/* 삭제 버튼 */}
+                      <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => onDeleteSong(song.id)}
+                          title="Remove this saved song"
+                          className="flex-shrink-0 text-red-500 hover:text-red-700 h-8 w-8" // 크기 조절 및 색상
+                      >
+                          <Trash2 className="h-4 w-4" />
+                      </Button>
+                  </div>
+              ))}
+          </div>
+      </ScrollArea>
+  );
+};
+
+// shadcn buttonVariants import 필요 (만약 buttonVariants 사용 시)
+import { buttonVariants } from "@/components/ui/button";

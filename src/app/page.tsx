@@ -76,10 +76,34 @@ const Player: React.FC<PlayerProps> = ({
   onSaveSong, // Home에서 전달받음
 }) => {
   const volumeIcon = volume === 0 ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />;
+  // 저장 피드백을 위한 로컬 상태 추가
+  const [showSavedFeedback, setShowSavedFeedback] = useState(false);
 
   // 버튼 비활성화 로직
   const isControlDisabled = stations.length === 0 || !activeStation;
   const canSaveSong = !isLoadingSong && currentSong && activeStation; // 저장 가능 조건
+
+  // 저장 버튼 클릭 핸들러
+  const handleSaveClick = () => {
+    if (canSaveSong) {
+      onSaveSong(); // Home의 저장 로직 호출 (토스트 메시지 포함)
+      setShowSavedFeedback(true); // 피드백 상태 활성화
+    }
+  };
+
+  // 피드백 상태를 잠시 후 리셋하는 useEffect
+  useEffect(() => {
+    let timer: NodeJS.Timeout | null = null;
+    if (showSavedFeedback) {
+      timer = setTimeout(() => {
+        setShowSavedFeedback(false);
+      }, 1500); // 1.5초 후 피드백 숨김
+    }
+    // 클린업 함수: 타이머 해제
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [showSavedFeedback]); // showSavedFeedback 상태가 true가 될 때 실행
 
   return (
     <div className="fixed bottom-0 left-0 w-full bg-secondary/80 backdrop-blur-md border-t border-border z-10 shadow-lg">
@@ -110,19 +134,29 @@ const Player: React.FC<PlayerProps> = ({
                     )}
                 </span>
 
-                {/* 곡 저장 버튼 */}
+                {/* 곡 저장 버튼 수정 */}
                 <Button
                   variant="ghost"
                   size="icon"
                   className={cn(
-                    "h-5 w-5 p-0 flex-shrink-0", // 크기 및 패딩 조절
-                    !canSaveSong && "opacity-50 cursor-not-allowed" // 비활성화 스타일
+                    "h-5 w-5 p-0 flex-shrink-0", // 기본 스타일
+                    // 저장 불가능 상태 스타일
+                    !canSaveSong && "opacity-30 cursor-not-allowed",
+                    // 피드백 활성화 시 스타일 (예: 파란색 강조)
+                    showSavedFeedback && "text-primary"
                   )}
-                  onClick={onSaveSong}
-                  disabled={!canSaveSong}
+                  onClick={handleSaveClick} // 새로 만든 핸들러 사용
+                  disabled={!canSaveSong} // 저장 가능할 때만 활성화
+                  // title 속성 단순화
                   title={canSaveSong ? "Save this song" : "Cannot save song"}
                 >
-                  <Bookmark className="h-4 w-4" />
+                  <Bookmark
+                    className={cn(
+                      "h-4 w-4",
+                      // 피드백 상태일 때만 아이콘 채우기
+                      showSavedFeedback ? "fill-current" : "fill-none"
+                    )}
+                  />
                 </Button>
 
                 {/* 게임 정보 */}
@@ -674,7 +708,7 @@ export default function Home() {
            {/* Saved Songs 탭 추가 */}
            <TabsTrigger value="savedSongs">
             <ListMusic className="w-4 h-4 mr-1" /> {/* 아이콘 변경 */}
-            Saved ({filteredSavedSongs.length})
+            Saved Songs ({filteredSavedSongs.length})
           </TabsTrigger>
         </TabsList>
 

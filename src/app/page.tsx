@@ -163,11 +163,7 @@ export default function Home() {
   const stopStation = useCallback(() => {
     if (audioRef.current) {
         audioRef.current.pause();
-        audioRef.current.removeAttribute('src');
-        audioRef.current.load();
         setIsPlaying(false);
-        setActiveStation(null);
-        setActiveGame(null);
         console.log('Audio stopped.');
     }
   }, []);

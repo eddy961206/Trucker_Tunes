@@ -19,7 +19,8 @@ import {
   Volume2,
   VolumeX,
   AlertTriangle,
-  Loader2, // 로딩 아이콘 추가
+  Loader2,
+  Star,
 } from 'lucide-react';
 import {Slider} from '@/components/ui/slider';
 // getCurrentSong은 actions 파일에서 가져옵니다.
@@ -199,6 +200,30 @@ export default function Home() {
   // useRouter 제거 (사용 안 함)
   // const router = useRouter();
 
+  // 즐겨찾기 상태
+  const [favoritedStations, setFavoritedStations] = useState<RadioStation[]>([]);
+
+  // 로컬 저장소에서 즐겨찾기 불러오기 (컴포넌트 마운트 시)
+  useEffect(() => {
+    const storedFavorites = localStorage.getItem('favoriteStations');
+    if (storedFavorites) {
+      try {
+        setFavoritedStations(JSON.parse(storedFavorites));
+      } catch (error) {
+        console.error("Failed to parse favorites from localStorage:", error);
+        localStorage.removeItem('favoriteStations'); // 파싱 실패 시 제거
+      }
+    }
+  }, []);
+
+  // 즐겨찾기 상태 변경 시 로컬 저장소에 저장
+  useEffect(() => {
+    // 초기 로드 시 빈 배열 저장을 방지하기 위해 조건 추가 가능 (선택 사항)
+    // if (favoritedStations.length > 0 || localStorage.getItem('favoriteStations')) {
+       localStorage.setItem('favoriteStations', JSON.stringify(favoritedStations));
+    // }
+  }, [favoritedStations]);
+
   // .sii 파일 로딩
   useEffect(() => {
     const fetchStations = async () => {
@@ -249,6 +274,31 @@ export default function Home() {
       audioRef.current.volume = volume / 100;
     }
   }, [volume]);
+
+  // 즐겨찾기 토글 함수
+  const toggleFavorite = useCallback((stationToToggle: RadioStation) => {
+    setFavoritedStations((prevFavorites) => {
+      const isFavorited = prevFavorites.some(
+        (favStation) => favStation.streamUrl === stationToToggle.streamUrl
+      );
+      if (isFavorited) {
+        // 즐겨찾기에서 제거
+        toast.info(`${stationToToggle.name} removed from favorites`);
+        return prevFavorites.filter(
+          (favStation) => favStation.streamUrl !== stationToToggle.streamUrl
+        );
+      } else {
+        // 즐겨찾기에 추가
+        toast.success(`${stationToToggle.name} added to favorites`);
+        return [...prevFavorites, stationToToggle];
+      }
+    });
+  }, []); // 의존성 없음
+
+  // isFavorite 함수 (StationList에 전달하여 버튼 상태 결정)
+   const isFavorite = useCallback((station: RadioStation): boolean => {
+    return favoritedStations.some(fav => fav.streamUrl === station.streamUrl);
+  }, [favoritedStations]);
 
   // 재생 함수 (useCallback으로 최적화)
   const playStation = useCallback(
@@ -397,6 +447,13 @@ export default function Home() {
 
   const filteredEts2Stations = useMemo(() => filterStations(ets2Stations), [ets2Stations, filterStations]);
   const filteredAtsStations = useMemo(() => filterStations(atsStations), [atsStations, filterStations]);
+  // 즐겨찾기 목록 필터링 (검색어만 적용)
+  const filteredFavoritedStations = useMemo(() => {
+      return favoritedStations.filter(station =>
+          station.name.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+  }, [favoritedStations, searchQuery]);
+
 
   // 메인 UI 렌더링
   return (
@@ -448,21 +505,49 @@ export default function Home() {
         </ScrollArea>
       </div>
 
+      {/* 게임 및 즐겨찾기 탭 */}
       {/* 게임 탭 */}
       <Tabs defaultValue="ets2" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="ets2">Euro Truck Simulator 2 ({filteredEts2Stations.length})</TabsTrigger>
-          <TabsTrigger value="ats">American Truck Simulator ({filteredAtsStations.length})</TabsTrigger>
+          <TabsTrigger value="ats">American Truck Simulator ({filteredAtsStations.length})</TabsTrigger>{/* Favorites 탭 추가 */}
+          <TabsTrigger value="favorites">
+            <Star className="w-4 h-4 mr-1" /> {/* 별 아이콘 추가 */}
+            Favorites ({filteredFavoritedStations.length})
+          </TabsTrigger>
         </TabsList>
 
         {/* ETS2 스테이션 목록 */}
         <TabsContent value="ets2">
-          <StationList stations={filteredEts2Stations} game="ETS2" onPlay={playStation} />
+          <StationList
+            stations={filteredEts2Stations}
+            game="ETS2"
+            onPlay={playStation}
+            onToggleFavorite={toggleFavorite} // 토글 함수 전달
+            isFavorite={isFavorite} // 즐겨찾기 여부 확인 함수 전달
+          />
         </TabsContent>
 
         {/* ATS 스테이션 목록 */}
         <TabsContent value="ats">
-           <StationList stations={filteredAtsStations} game="ATS" onPlay={playStation} />
+           <StationList
+             stations={filteredAtsStations}
+             game="ATS"
+             onPlay={playStation}
+             onToggleFavorite={toggleFavorite} // 토글 함수 전달
+             isFavorite={isFavorite} // 즐겨찾기 여부 확인 함수 전달
+            />
+        </TabsContent>
+
+         {/* Favorites 스테이션 목록 */}
+        <TabsContent value="favorites">
+           <StationList
+             stations={filteredFavoritedStations} // 필터링된 즐겨찾기 목록 사용
+             game={null} // 즐겨찾기 탭에서는 특정 게임 지정 안 함 (또는 필요 시 로직 추가)
+             onPlay={playStation} // 즐겨찾기에서도 재생 가능
+             onToggleFavorite={toggleFavorite}
+             isFavorite={isFavorite} // 즐겨찾기 탭에서는 항상 true 지만 일관성을 위해 전달
+            />
         </TabsContent>
       </Tabs>
 
@@ -489,28 +574,59 @@ interface StationListProps {
   stations: RadioStation[];
   game: Game;
   onPlay: (station: RadioStation, game: Game) => void;
+  onToggleFavorite: (station: RadioStation) => void; // 추가
+  isFavorite: (station: RadioStation) => boolean; // 추가
 }
 
-const StationList: React.FC<StationListProps> = ({ stations, game, onPlay }) => {
+const StationList: React.FC<StationListProps> = ({ stations, game, onPlay, onToggleFavorite, isFavorite }) => {
   if (stations.length === 0) {
     return <p className="text-muted-foreground p-4 text-center">No stations match your filters.</p>;
   }
 
+  // 즐겨찾기 탭일 경우 game 결정 로직 (선택적 개선)
+  const determineGame = (station: RadioStation): Game => {
+      // 실제로는 ets2/ats 스테이션 목록을 Home에서 받아서 확인해야 더 정확함
+      // 여기서는 간단히 'ETS2' 또는 'ATS' 중 하나로 가정하거나,
+      // station 객체에 game 정보가 있다면 그것을 사용
+      return game || 'ETS2'; // 기본값 또는 적절한 로직 필요
+  }
+
   return (
-    <ScrollArea className="h-[45vh] md:h-[50vh] w-full rounded-md border"> {/* 높이 조정 */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 p-4"> {/* 반응형 그리드 개선 */}
-        {stations.map((station) => (
-          <Button
-            variant="outline" // outline 스타일
-            className="w-full h-auto justify-start text-left flex flex-col items-start p-3" // 스타일 변경
-            key={station.streamUrl}
-            onClick={() => onPlay(station, game)}
-            title={`Play ${station.name}`}
-          >
-            <span className="font-semibold truncate w-full">{station.name}</span>
-            <span className="text-xs text-muted-foreground">{station.genre}</span>
-          </Button>
-        ))}
+    <ScrollArea className="h-[45vh] md:h-[50vh] w-full rounded-md border">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 p-4">
+        {stations.map((station) => {
+          const favorited = isFavorite(station); // 현재 스테이션 즐겨찾기 여부 확인
+          const stationGame = determineGame(station); // 이 스테이션의 게임 결정
+
+          return (
+            <div key={station.streamUrl} className="flex items-center bg-card p-3 rounded-md border group">
+              <Button
+                variant="ghost" // 내부 버튼은 ghost로
+                className="flex-grow h-auto justify-start text-left flex flex-col items-start p-0 mr-2" // 패딩 제거, 마진 추가
+                onClick={() => onPlay(station, stationGame)} // 결정된 게임 정보 사용
+                title={`Play ${station.name}`}
+              >
+                <span className="font-semibold truncate w-full">{station.name}</span>
+                <span className="text-xs text-muted-foreground">{station.genre}</span>
+              </Button>
+              {/* 즐겨찾기 버튼 */}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => onToggleFavorite(station)}
+                title={favorited ? "Remove from favorites" : "Add to favorites"}
+                className="flex-shrink-0 text-muted-foreground hover:text-primary" // 기본 색상 및 호버 효과
+              >
+                <Star
+                  className={cn(
+                    "h-5 w-5",
+                    favorited ? "fill-yellow-400 text-yellow-500" : "fill-none" // 즐겨찾기 시 채움
+                  )}
+                />
+              </Button>
+            </div>
+          );
+        })}
       </div>
     </ScrollArea>
   );

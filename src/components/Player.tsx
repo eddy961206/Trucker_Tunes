@@ -82,33 +82,50 @@ export const Player: React.FC<PlayerProps> = ({
     <div className="fixed bottom-0 left-0 w-full bg-secondary/80 backdrop-blur-md border-t border-border z-10 shadow-lg">
       <div className="container mx-auto p-4 flex items-center justify-between gap-4">
         {/* 스테이션 정보 */}
+        {/* md 이상일 때 max-w-md, 기본 max-w-xs */}
         <div className="flex-shrink min-w-0 max-w-xs md:max-w-sm lg:max-w-md">
           {activeStation ? (
             <div>
-              <h2 className="text-lg font-semibold truncate" title={activeStation.name}>{activeStation.name}</h2>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground truncate">
-                 <span className="flex-grow truncate">
-                    {isLoadingSong ? (
-                    <span className="flex items-center text-xs">
-                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                        Loading...
+               {/* Station Name Wrapper for Marquee */}
+               <div className="overflow-hidden w-full whitespace-nowrap"> {/* 부모에 overflow, nowrap */}
+                <h2
+                  className="text-lg font-semibold animate-marquee md:animate-none md:inline md:whitespace-normal md:truncate" // marquee 적용, md 이상에선 해제 및 truncate
+                  title={activeStation.name}
+                >
+                  {activeStation.name}
+                </h2>
+              </div>
+              {/* Song Info Area */}
+              {/* gap-1 로 약간 줄임 */}
+              <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                {/* Song Title Wrapper for Marquee */}
+                {/* mr-1 추가하여 버튼과 간격 확보 */}
+                <div className="overflow-hidden whitespace-nowrap flex-grow min-w-0 h-4 mr-1">
+                  {isLoadingSong ? (
+                    <span className="flex items-center text-xs h-full">
+                      <Loader2 className="h-3 w-3 mr-1 animate-spin" /> Loading...
                     </span>
-                    ) : currentSong ? (
-                    <span title={currentSong}>{currentSong}</span>
-                    ) : isSongUnavailable ? (
-                    <span className="flex items-center text-xs text-yellow-600 dark:text-yellow-500">
-                        <AlertTriangle className="h-3 w-3 mr-1 flex-shrink-0" />
-                        Info unavailable
+                  ) : currentSong ? (
+                    <span
+                      title={currentSong}
+                      className="animate-marquee md:animate-none md:inline md:whitespace-normal md:truncate"
+                    >
+                      {currentSong}
                     </span>
-                    ) : (
-                    activeStation.genre
-                    )}
-                </span>
+                  ) : isSongUnavailable ? (
+                    <span className="flex items-center text-xs text-yellow-600 dark:text-yellow-500 h-full">
+                      <AlertTriangle className="h-3 w-3 mr-1 flex-shrink-0" /> Info unavailable
+                    </span>
+                  ) : (
+                    <span className="truncate">{activeStation.genre}</span>
+                  )}
+                </div>
+                {/* Save Button */}
                 <Button
                   variant="ghost"
                   size="icon"
                   className={cn(
-                    "h-5 w-5 p-0 flex-shrink-0",
+                    "h-5 w-5 p-0 flex-shrink-0", // 기본 크기
                     !canSaveSong && "opacity-30 cursor-not-allowed",
                     showSavedFeedback && "text-primary"
                   )}
@@ -123,8 +140,9 @@ export const Player: React.FC<PlayerProps> = ({
                     )}
                   />
                 </Button>
-                <span className="mx-1 flex-shrink-0">|</span>
-                <span className="flex-shrink-0">{activeGame}</span>
+                {/* Separator & Game Info: 기본 hidden, md 이상에서 inline */}
+                <span className="mx-1 flex-shrink-0 hidden md:inline">|</span>
+                <span className="flex-shrink-0 hidden md:inline">{activeGame}</span>
               </div>
             </div>
           ) : (
@@ -140,7 +158,6 @@ export const Player: React.FC<PlayerProps> = ({
           <Button
             variant="ghost"
             size="icon"
-            // onClick 수정: activeGame이 null일 수 있으므로 Home에서 처리하도록 함
             onClick={activeStation ? (isPlaying ? stopStation : () => playStation(activeStation, activeGame!)) : undefined}
             disabled={!activeStation}
             className="w-10 h-10"
@@ -155,8 +172,8 @@ export const Player: React.FC<PlayerProps> = ({
           </Button>
         </div>
 
-        {/* 볼륨 컨트롤 */}
-        <div className="flex items-center space-x-2 w-32">
+        {/* 기본 hidden, md 이상에서 flex */}
+        <div className="hidden md:flex items-center space-x-2 w-32">
           {volumeIcon}
           <Slider
             min={0}

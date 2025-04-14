@@ -199,6 +199,7 @@ export default function Home() {
   const [currentSong, setCurrentSong] = useState<string | null>(null);
   const [isLoadingSong, setIsLoadingSong] = useState(false);
   const [isSongUnavailable, setIsSongUnavailable] = useState(false);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null); // Interval ID 저장용 Ref
 
   // 로컬 저장소에서 즐겨찾기 불러오기 (컴포넌트 마운트 시)
   useEffect(() => {
@@ -290,45 +291,85 @@ export default function Home() {
     }
   }, [volume]);
 
-  // 현재 곡 정보 가져오기 useEffect (Player에서 이동)
-  useEffect(() => {
-    let isMounted = true;
-    const fetchSong = async () => {
-      if (activeStation && activeStation.streamUrl) {
-        setIsLoadingSong(true);
-        setIsSongUnavailable(false);
-        setCurrentSong(null);
-        try {
-          const song = await getCurrentSong(activeStation.streamUrl);
-          if (isMounted) {
-            if (song) {
-              setCurrentSong(song);
-              setIsSongUnavailable(false);
-            } else {
-              setCurrentSong(null);
-              setIsSongUnavailable(true);
-            }
-          }
-        } catch (error) {
-          console.error("Error fetching song from Server Action:", error);
-          if (isMounted) {
-            setCurrentSong(null);
-            setIsSongUnavailable(true);
-          }
-        } finally {
-          if (isMounted) {
-            setIsLoadingSong(false);
-          }
+  // --- 현재 곡 정보 가져오기 로직 (수정됨) ---
+  // 곡 정보를 가져오고 상태를 업데이트하는 함수 (useCallback으로 감싸기)
+  const fetchAndUpdateSong = useCallback(async (station: RadioStation | null) => {
+    if (!station || !station.streamUrl) {
+      setCurrentSong(null);
+      setIsLoadingSong(false);
+      setIsSongUnavailable(false);
+      return;
+    }
+
+    // 첫 호출 시 또는 스테이션 변경 시 로딩 상태 표시
+    // 주기적 호출 시에는 백그라운드에서 업데이트하므로 로딩 표시 안 함 (선택적)
+    // 여기서는 일단 로딩 표시는 초기 호출 시에만 하도록 로직 분리 필요
+    // 우선 간단하게 로딩 표시는 제거하고 진행
+
+    try {
+      // 서버 액션 호출
+      const song = await getCurrentSong(station.streamUrl);
+      // 상태 업데이트 (현재 곡 정보와 다를 경우에만 업데이트하여 불필요한 리렌더링 방지)
+      setCurrentSong(prevSong => {
+        if (song !== prevSong) {
+            setIsSongUnavailable(!song); // song이 null이면 true
+            return song; // 새로운 곡 정보 반환
         }
-      } else {
-        setCurrentSong(null);
+        return prevSong; // 변경 없으면 이전 상태 유지
+      });
+    } catch (error) {
+      console.error("Error fetching song periodically:", error);
+      // 에러 발생 시 정보 없음 처리 (이전 정보와 다를 경우만 업데이트)
+      setCurrentSong(prevSong => {
+        if (prevSong !== null) {
+            setIsSongUnavailable(true);
+            return null;
+        }
+        return prevSong;
+      });
+    } finally {
+        // 주기적 호출에서는 로딩 상태를 계속 true로 두지 않음
         setIsLoadingSong(false);
-        setIsSongUnavailable(false);
+    }
+  }, []); // 의존성 배열 비움 (내부에서 최신 상태 참조 안 하므로) - 필요 시 currentSong 추가 고려
+
+  // 스테이션 변경 또는 재생 상태 변경 시 곡 정보 가져오기 및 인터벌 설정/해제
+  useEffect(() => {
+    // 기존 인터벌 클리어
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+
+    if (isPlaying && activeStation) {
+      // 재생 시작 시 즉시 한 번 호출 (로딩 상태 포함)
+      setIsLoadingSong(true);
+      setIsSongUnavailable(false);
+      setCurrentSong(null); // 초기화
+      fetchAndUpdateSong(activeStation); // 즉시 호출
+
+      // 20초 간격으로 업데이트 설정
+      intervalRef.current = setInterval(() => {
+        fetchAndUpdateSong(activeStation);
+      }, 20000); // 20초 (20000ms)
+
+    } else {
+      // 재생 중이 아니거나 스테이션이 없으면 상태 초기화
+      setCurrentSong(null);
+      setIsLoadingSong(false);
+      setIsSongUnavailable(false);
+    }
+
+    // 클린업 함수: 컴포넌트 언마운트 또는 의존성 변경 시 인터벌 해제
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
     };
-    fetchSong();
-    return () => { isMounted = false; };
-  }, [activeStation]); // activeStation 변경 시 실행  
+    // isPlaying, activeStation 변경 시 인터벌 재설정
+    // fetchAndUpdateSong 함수 자체는 useCallback으로 감쌌으므로 참조 안정적
+  }, [isPlaying, activeStation, fetchAndUpdateSong]);
 
   // 즐겨찾기 토글 함수
   const toggleFavorite = useCallback((stationToToggle: RadioStation) => {

@@ -35,6 +35,7 @@ export default function Home() {
   const [activeStation, setActiveStation] = useState<RadioStation | null>(null);
   const [activeGame, setActiveGame] = useState<Game | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isConnectingStation, setIsConnectingStation] = useState(false); // 이 줄이 있는지 확인!
   const [searchQuery, setSearchQuery] = useState('');
   const [volume, setVolume] = useState(50);
   const [favoritedStations, setFavoritedStations] = useState<RadioStation[]>([]);
@@ -43,6 +44,7 @@ export default function Home() {
   const [isLoadingSong, setIsLoadingSong] = useState(false);
   const [isSongUnavailable, setIsSongUnavailable] = useState(false);
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<string>('ets2'); // 현재 활성화된 탭 상태 추가
   const visibilityIntervalRef = useRef<NodeJS.Timeout | null>(null); // 1분 인터벌용 Ref
 
   // Ref
@@ -301,75 +303,6 @@ export default function Home() {
         });
   }, [volume, ets2Stations, stopStation]); // 의존성에 setActiveStation, setActiveGame 등은 직접 상태를 바꾸므로 넣지 않음
 
-  const allStations = useMemo(() => [...ets2Stations, ...atsStations], [ets2Stations, atsStations]);
-
-  // 이전 곡 (항상 전체 목록 기준 순환)
-  const handlePrevStation = useCallback(() => {
-    // 1. 기본 확인: 현재 재생 스테이션과 전체 목록 존재 여부
-    if (!activeStation || allStations.length === 0) return;
-
-    // 2. 전체 목록(allStations)에서 현재 스테이션 인덱스 찾기
-    const currentIndex = allStations.findIndex(s => s.streamUrl === activeStation.streamUrl);
-
-    // 3. 못 찾으면 중단 (이론상 발생하면 안 됨)
-    if (currentIndex === -1) {
-      console.error("Error: Active station not found in all stations list.");
-      return;
-    }
-
-    // 4. 전체 목록 기준으로 이전 인덱스 계산
-    const prevIndex = (currentIndex - 1 + allStations.length) % allStations.length;
-
-    // 5. 전체 목록에서 이전 스테이션 가져오기
-    const prevStation = allStations[prevIndex];
-
-    // 6. 이전 스테이션의 게임 정보 결정
-    const game = ets2Stations.some(s => s.streamUrl === prevStation.streamUrl) ? 'ETS2' : 'ATS';
-
-    // 7. 이전 스테이션 재생
-    playStation(prevStation, game);
-
-  }, [activeStation, allStations, ets2Stations, playStation]); // 의존성 배열 업데이트
-
-  // 다음 곡 (항상 전체 목록 기준 순환)
-  const handleNextStation = useCallback(() => {
-    // 1. 기본 확인: 현재 재생 스테이션과 전체 목록 존재 여부
-    if (!activeStation || allStations.length === 0) return;
-
-    // 2. 전체 목록(allStations)에서 현재 스테이션 인덱스 찾기
-    const currentIndex = allStations.findIndex(s => s.streamUrl === activeStation.streamUrl);
-
-    // 3. 못 찾으면 중단
-    if (currentIndex === -1) {
-        console.error("Error: Active station not found in all stations list.");
-        return;
-    }
-
-    // 4. 전체 목록 기준으로 다음 인덱스 계산
-    const nextIndex = (currentIndex + 1) % allStations.length;
-
-    // 5. 전체 목록에서 다음 스테이션 가져오기
-    const nextStation = allStations[nextIndex];
-
-    // 6. 다음 스테이션의 게임 정보 결정
-    const game = ets2Stations.some(s => s.streamUrl === nextStation.streamUrl) ? 'ETS2' : 'ATS';
-
-    // 7. 다음 스테이션 재생
-    playStation(nextStation, game);
-
-  }, [activeStation, allStations, ets2Stations, playStation]); // 의존성 배열 업데이트
-
-  const handleRandomStation = useCallback(() => {
-    if (allStations.length === 0) { toast.info("No stations available"); return; }
-    const randomIndex = Math.floor(Math.random() * allStations.length);
-    const randomStation = allStations[randomIndex];
-    const game = ets2Stations.some(s => s.streamUrl === randomStation.streamUrl) ? 'ETS2' : 'ATS';
-    playStation(randomStation, game);
-  }, [allStations, ets2Stations, playStation]);
-
-  // --- 필터링 로직 (useMemo, useCallback) ---
-  const genres = useMemo(() => [...new Set(allStations.map(s => s.genre).filter(Boolean))].sort(), [allStations]);
-
   const filterStations = useCallback((stations: RadioStation[]) => stations.filter(station =>
     station.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
     (!selectedGenre || station.genre === selectedGenre)
@@ -389,9 +322,76 @@ export default function Home() {
         s.stationName.toLowerCase().includes(query)
     );
   }, [savedSongs, searchQuery]);
+  // --- 현재 화면에 보이는 방송국 목록 계산 ---
+  const currentVisibleStations = useMemo(() => {
+    switch (activeTab) {
+      case 'ets2': return filteredEts2Stations;
+      case 'ats': return filteredAtsStations;
+      case 'favorites': return filteredFavoritedStations;
+      default: return []; // Saved 탭이나 다른 경우는 빈 배열
+    }
+  }, [activeTab, filteredEts2Stations, filteredAtsStations, filteredFavoritedStations]);
+
+  const allStations = useMemo(() => [...ets2Stations, ...atsStations], [ets2Stations, atsStations]);
+
+  // 이전 곡 (항상 전체 목록 기준 순환)
+  const handlePrevStation = useCallback(() => {
+    // 현재 보이는 목록이나 활성 스테이션 없으면 중단
+    if (!activeStation || currentVisibleStations.length < 2) return;
+
+    const currentIndex = currentVisibleStations.findIndex(s => s.streamUrl === activeStation.streamUrl);
+    if (currentIndex === -1) {
+      // 현재 재생 중인 곡이 필터링된 목록에 없을 수도 있음 (예: 즐겨찾기 재생 중 ETS2 탭 보기)
+      // 이 경우, 목록의 첫번째 또는 마지막 곡으로 이동하거나, 동작하지 않게 할 수 있음. 여기선 동작 안 함.
+      console.warn("Active station not found in the current visible list.");
+      return;
+    }
+
+    const prevIndex = (currentIndex - 1 + currentVisibleStations.length) % currentVisibleStations.length;
+    const prevStation = currentVisibleStations[prevIndex];
+    // 게임 타입 결정 (ETS2 목록 확인)
+    const game = ets2Stations.some(s => s.streamUrl === prevStation.streamUrl) ? 'ETS2' : 'ATS';
+    playStation(prevStation, game);
+
+  // 의존성 배열 업데이트
+  }, [activeStation, currentVisibleStations, playStation, ets2Stations]);
+
+  // --- 다음 곡 핸들러 수정 ---
+  const handleNextStation = useCallback(() => {
+    // 현재 보이는 목록이나 활성 스테이션 없으면 중단
+    if (!activeStation || currentVisibleStations.length < 2) return;
+
+    const currentIndex = currentVisibleStations.findIndex(s => s.streamUrl === activeStation.streamUrl);
+     if (currentIndex === -1) {
+        console.warn("Active station not found in the current visible list.");
+        return;
+    }
+
+    const nextIndex = (currentIndex + 1) % currentVisibleStations.length;
+    const nextStation = currentVisibleStations[nextIndex];
+    const game = ets2Stations.some(s => s.streamUrl === nextStation.streamUrl) ? 'ETS2' : 'ATS';
+    playStation(nextStation, game);
+
+  // 의존성 배열 업데이트
+  }, [activeStation, currentVisibleStations, playStation, ets2Stations]);
+
+  const handleRandomStation = useCallback(() => {
+    if (allStations.length === 0) { toast.info("No stations available"); return; }
+    const randomIndex = Math.floor(Math.random() * allStations.length);
+    const randomStation = allStations[randomIndex];
+    const game = ets2Stations.some(s => s.streamUrl === randomStation.streamUrl) ? 'ETS2' : 'ATS';
+    playStation(randomStation, game);
+  }, [allStations, ets2Stations, playStation]);
+
+  // --- 필터링 로직 (useMemo, useCallback) ---
+  const genres = useMemo(() => [...new Set(allStations.map(s => s.genre).filter(Boolean))].sort(), [allStations]);
 
 
+  
   // --- 렌더링 ---
+  // 이전/다음 버튼 비활성화 조건 계산
+  const isPrevNextDisabled = currentVisibleStations.length < 2 || activeTab === 'savedSongs';
+
   return (
     <div className="container mx-auto pt-4 pb-24 px-4">
       <h1 className="text-2xl font-bold mb-4">Trucker Tunes</h1>
@@ -424,8 +424,8 @@ export default function Home() {
         </ScrollArea>
       </div>
 
-      {/* 탭 */}
-      <Tabs defaultValue="ets2" className="space-y-4">
+      {/* 탭: value와 onValueChange 추가 */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} defaultValue="ets2" className="space-y-4">
         <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="ets2">ETS2 ({filteredEts2Stations.length})</TabsTrigger>
           <TabsTrigger value="ats">ATS ({filteredAtsStations.length})</TabsTrigger>
@@ -445,10 +445,12 @@ export default function Home() {
         activeStation={activeStation}
         activeGame={activeGame}
         isPlaying={isPlaying}
+        isConnectingStation={isConnectingStation}
         playStation={playStation}
         stopStation={stopStation}
         handlePrevStation={handlePrevStation}
         handleNextStation={handleNextStation}
+        isPrevNextDisabled={isPrevNextDisabled} // 비활성화 조건 전달
         handleRandomStation={handleRandomStation}
         volume={volume}
         setVolume={setVolume}

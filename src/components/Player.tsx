@@ -35,6 +35,8 @@ interface PlayerProps {
   isLoadingSong: boolean; // Home에서 받음
   isSongUnavailable: boolean; // Home에서 받음
   onSaveSong: () => void; // 저장 버튼 클릭 시 호출될 함수
+  isConnectingStation: boolean;
+  isPrevNextDisabled: boolean; // 이전/다음 버튼 비활성화 prop 추가
   onRefreshSong: () => void; // 새로고침 함수 prop 추가
 }
 
@@ -42,6 +44,7 @@ export const Player: React.FC<PlayerProps> = ({
   activeStation,
   activeGame,
   isPlaying,
+  isConnectingStation, // <--- 여기에 추가!
   playStation, // playStation 함수 받기 (타입 주의)
   stopStation,
   handlePrevStation,
@@ -54,12 +57,13 @@ export const Player: React.FC<PlayerProps> = ({
   isLoadingSong,
   isSongUnavailable,
   onSaveSong,
-  onRefreshSong, // prop 받기
+  isPrevNextDisabled, // prop 받기
+  onRefreshSong,
 }) => {
   const volumeIcon = volume === 0 ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />;
   const [showSavedFeedback, setShowSavedFeedback] = useState(false);
 
-  const isControlDisabled = stations.length === 0 || !activeStation;
+  const isControlDisabled = !activeStation;
   const canSaveSong = !isLoadingSong && currentSong && activeStation;
   // 새로고침 버튼 활성화 조건 추가
   const canRefreshSong = !isLoadingSong && activeStation;
@@ -172,22 +176,40 @@ export const Player: React.FC<PlayerProps> = ({
 
         {/* 재생 컨트롤 */}
         <div className="flex items-center space-x-2">
-          <Button variant="ghost" size="icon" onClick={handlePrevStation} disabled={isControlDisabled}>
+          <Button /* 이전 버튼 */
+            variant="ghost"
+            size="icon"
+            onClick={handlePrevStation}
+            // isControlDisabled(activeStation 없음) 또는 isPrevNextDisabled(목록 길이 부족 등) 또는 isConnectingStation 일 때 비활성화
+            disabled={isControlDisabled || isPrevNextDisabled || isConnectingStation}
+          >
             <SkipBack className="h-5 w-5" />
           </Button>
-          <Button
+          <Button /* 메인 재생/일시정지 버튼 */
             variant="ghost"
             size="icon"
             onClick={activeStation ? (isPlaying ? stopStation : () => playStation(activeStation, activeGame!)) : undefined}
-            disabled={!activeStation}
+            disabled={isControlDisabled || isConnectingStation} // activeStation 없거나 연결 중일 때 비활성화
             className="w-10 h-10"
           >
             {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}
           </Button>
-          <Button variant="ghost" size="icon" onClick={handleNextStation} disabled={isControlDisabled}>
+          <Button /* 다음 버튼 */
+            variant="ghost"
+            size="icon"
+            onClick={handleNextStation}
+            // isControlDisabled(activeStation 없음) 또는 isPrevNextDisabled(목록 길이 부족 등) 또는 isConnectingStation 일 때 비활성화
+            disabled={isControlDisabled || isPrevNextDisabled || isConnectingStation}
+          >
             <SkipForward className="h-5 w-5" />
           </Button>
-          <Button variant="ghost" size="icon" onClick={handleRandomStation} disabled={stations.length === 0}>
+          <Button /* 랜덤 버튼 */
+            variant="ghost"
+            size="icon"
+            onClick={handleRandomStation}
+            // 전체 스테이션 없거나 연결 중일 때 비활성화 (이건 allStations 기준 유지)
+            disabled={stations.length === 0 || isConnectingStation}
+          >
              <Shuffle className="h-5 w-5" />
           </Button>
         </div>

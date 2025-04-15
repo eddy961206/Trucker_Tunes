@@ -116,61 +116,93 @@ export default function Home() {
   // currentSong을 의존성에 추가하여 최신 노래 정보와 비교하도록 함
   }, [currentSong]);
 
-  // --- 재생 시작 시 첫 노래 정보 로드 useEffect ---
-  // (기존 인터벌 로직 제거 후, 첫 호출만 남김)
-  useEffect(() => {
-    if (isPlaying && activeStation) {
-      // 재생 시작 시 일단 한 번 가져오기
-      fetchAndUpdateSong(activeStation);
+  // --- visibilitychange 핸들러 콜백화 ---
+  const handleVisibilityChange = useCallback(() => {
+    // 콘솔 로그를 추가하여 이벤트 발생 확인
+    console.log(`Visibility changed. document.hidden: ${document.hidden}`);
+
+    if (document.hidden) {
+      // 탭 숨겨지면 인터벌 클리어
+      if (visibilityIntervalRef.current) {
+        clearInterval(visibilityIntervalRef.current);
+        visibilityIntervalRef.current = null;
+        console.log("Tab hidden, stopping auto-refresh.");
+      }
     } else {
+      // 탭 다시 보이면 즉시 업데이트 시도 (재생 중일 때만)
+      console.log("Tab visible.");
+      // isPlaying과 activeStation의 최신 상태를 직접 참조
+      if (isPlaying && activeStation) {
+        console.log("Fetching song info immediately because tab became visible.");
+        fetchAndUpdateSong(activeStation); // 즉시 실행
+
+        // 기존 인터벌 제거 후 새로 시작 (1분 간격)
+        if (visibilityIntervalRef.current) {
+             clearInterval(visibilityIntervalRef.current);
+        }
+        visibilityIntervalRef.current = setInterval(() => {
+          console.log("Auto-refreshing song info (1 min interval - started on visibility gain).");
+          // 인터벌 내에서도 최신 activeStation 참조 필요 (현재 구조에서는 OK)
+          fetchAndUpdateSong(activeStation);
+        }, 60000); // 1분
+      }
+    }
+  // isPlaying, activeStation, fetchAndUpdateSong이 변경될 때마다 이 핸들러 함수 자체가 새로 생성됨
+  }, [isPlaying, activeStation, fetchAndUpdateSong]);
+
+  // --- 재생 시작/중지 시 인터벌 및 초기 로드 관리 useEffect ---
+  useEffect(() => {
+    // 재생 중지 시 인터벌 클리어
+    if (!isPlaying || !activeStation) {
+      if (visibilityIntervalRef.current) {
+        clearInterval(visibilityIntervalRef.current);
+        visibilityIntervalRef.current = null;
+        console.log("Playback stopped or no active station, clearing interval.");
+      }
       // 정지 시 노래 정보 초기화
       setCurrentSong(null);
       setIsLoadingSong(false);
       setIsSongUnavailable(false);
+      return; // 아래 로직 실행 안 함
     }
-    // isPlaying, activeStation 변경 시 실행
+
+    // 재생 시작 시:
+    // 탭이 활성화 상태일 때만 즉시 정보 로드 및 인터벌 시작
+    if (!document.hidden) {
+      console.log("Playback started while tab visible. Fetching initial song info and starting interval.");
+      fetchAndUpdateSong(activeStation);
+      // 기존 인터벌 클리어 후 시작 (혹시 모를 중복 방지)
+      if (visibilityIntervalRef.current) clearInterval(visibilityIntervalRef.current);
+      visibilityIntervalRef.current = setInterval(() => {
+         console.log("Auto-refreshing song info (1 min interval - started on play).");
+         fetchAndUpdateSong(activeStation);
+      }, 60000);
+    } else {
+      console.log("Playback started while tab hidden. Will fetch info when tab becomes visible.");
+      // 탭 숨겨진 상태면 아무것도 안 함 (visibilitychange 핸들러가 처리)
+    }
+
+    // isPlaying, activeStation 변경 시 이 로직 재실행
   }, [isPlaying, activeStation, fetchAndUpdateSong]);
 
 
-  // --- 탭 활성화 감지 및 1분 자동 업데이트 useEffect ---
+  // --- 탭 활성화 감지 useEffect 수정 ---
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        // 탭 숨겨지면 인터벌 클리어
-        if (visibilityIntervalRef.current) {
-          clearInterval(visibilityIntervalRef.current);
-          visibilityIntervalRef.current = null;
-          console.log("Tab hidden, stopping auto-refresh.");
-        }
-      } else {
-        // 탭 다시 보이면 즉시 업데이트 시도 및 1분 인터벌 시작 (재생 중일 때만)
-        console.log("Tab visible.");
-        if (isPlaying && activeStation) {
-          console.log("Fetching song info immediately and starting 1-min interval.");
-          fetchAndUpdateSong(activeStation); // 즉시 실행
-          visibilityIntervalRef.current = setInterval(() => {
-            console.log("Auto-refreshing song info (1 min interval).")
-            fetchAndUpdateSong(activeStation);
-          }, 60000); // 1분 (60 * 1000 ms)
-        }
-      }
-    };
-
-    // 이벤트 리스너 등록
+    // handleVisibilityChange 함수는 이제 useCallback으로 생성된 안정적인 참조
     document.addEventListener('visibilitychange', handleVisibilityChange);
     console.log("Visibility change listener added.");
 
-    // 컴포넌트 언마운트 또는 isPlaying/activeStation 변경 시 정리
+    // 클린업 함수: 리스너 제거 및 인터벌 클리어
     return () => {
       console.log("Removing visibility change listener and clearing interval.");
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (visibilityIntervalRef.current) {
         clearInterval(visibilityIntervalRef.current);
-        visibilityIntervalRef.current = null;
+        visibilityIntervalRef.current = null; // 클린업 시 확실히 null로 설정
       }
     };
-    // isPlaying, activeStation 상태가 바뀔 때마다 리스너/인터벌 재설정 필요
-  }, [isPlaying, activeStation, fetchAndUpdateSong]);
+    // handleVisibilityChange 함수 자체가 의존성을 가지므로, 이 함수를 의존성 배열에 넣는다.
+  }, [handleVisibilityChange]);
 
   // --- 수동 새로고침 핸들러 ---
   const handleManualRefreshSong = useCallback(() => {

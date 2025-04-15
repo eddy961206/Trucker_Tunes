@@ -190,6 +190,9 @@ export default function Home() {
     const actualGame = game ?? (ets2Stations.some(s => s.streamUrl === station.streamUrl) ? 'ETS2' : 'ATS');
     if (audioRef.current) stopStation(); // 기존 재생 중지 (stopStation 호출로 변경)
 
+    setActiveStation(station);
+    setActiveGame(actualGame);
+
     const newAudio = new Audio(station.streamUrl);
     audioRef.current = newAudio;
     newAudio.volume = volume / 100;
@@ -198,7 +201,7 @@ export default function Home() {
         const err = (e.target as HTMLAudioElement).error;
         console.error('Audio error:', err);
         toast.error('Stream Error', { description: `Failed to play ${station.name}. Code: ${err?.code}` });
-        stopStation(); // 에러 시 정지
+        stopStation();
         newAudio.removeEventListener('error', errorListener);
     };
     newAudio.addEventListener('error', errorListener);
@@ -206,19 +209,15 @@ export default function Home() {
     newAudio.play()
         .then(() => {
             setIsPlaying(true);
-            setActiveStation(station);
-            setActiveGame(actualGame); // 실제 게임 타입으로 설정
             toast.success('Playing Station', { description: `Now playing: ${station.name}` });
-            // 에러 리스너는 play 성공 후에도 유지 (스트리밍 중 에러 대비)
-            // stopStation 시 정리될 것임
         })
         .catch((playError) => {
             console.error('Failed to play:', playError);
             toast.error('Playback Error', { description: `Could not start ${station.name}.` });
-            newAudio.removeEventListener('error', errorListener); // 에러 리스너 정리
+            newAudio.removeEventListener('error', errorListener);
             stopStation();
         });
-  }, [volume, ets2Stations, stopStation]); // stopStation 추가, 필요시 atsStations도
+  }, [volume, ets2Stations, stopStation]); // 의존성에 setActiveStation, setActiveGame 등은 직접 상태를 바꾸므로 넣지 않음
 
   const allStations = useMemo(() => [...ets2Stations, ...atsStations], [ets2Stations, atsStations]);
 

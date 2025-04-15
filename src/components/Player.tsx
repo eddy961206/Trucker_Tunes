@@ -13,6 +13,7 @@ import {
   VolumeX,
   AlertTriangle,
   Loader2,
+  RefreshCw, // 새로고침 아이콘 추가
   Bookmark,
 } from 'lucide-react';
 
@@ -34,6 +35,7 @@ interface PlayerProps {
   isLoadingSong: boolean; // Home에서 받음
   isSongUnavailable: boolean; // Home에서 받음
   onSaveSong: () => void; // 저장 버튼 클릭 시 호출될 함수
+  onRefreshSong: () => void; // 새로고침 함수 prop 추가
 }
 
 export const Player: React.FC<PlayerProps> = ({
@@ -52,12 +54,15 @@ export const Player: React.FC<PlayerProps> = ({
   isLoadingSong,
   isSongUnavailable,
   onSaveSong,
+  onRefreshSong, // prop 받기
 }) => {
   const volumeIcon = volume === 0 ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />;
   const [showSavedFeedback, setShowSavedFeedback] = useState(false);
 
   const isControlDisabled = stations.length === 0 || !activeStation;
   const canSaveSong = !isLoadingSong && currentSong && activeStation;
+  // 새로고침 버튼 활성화 조건 추가
+  const canRefreshSong = !isLoadingSong && activeStation;
 
   const handleSaveClick = () => {
     if (canSaveSong) {
@@ -98,6 +103,21 @@ export const Player: React.FC<PlayerProps> = ({
               {/* Song Info Area */}
               {/* gap-1 로 약간 줄임 */}
               <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                {/* Refresh Button 추가 */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    "h-5 w-5 p-0 flex-shrink-0 mr-1", // 크기 및 마진 조정
+                    !canRefreshSong && "opacity-30 cursor-not-allowed",
+                    isLoadingSong && "animate-spin" // 로딩 중 아이콘 회전
+                  )}
+                  onClick={onRefreshSong}
+                  disabled={!canRefreshSong}
+                  title="Refresh song info"
+                >
+                  <RefreshCw className="h-3 w-3" /> {/* 아이콘 크기 조정 */}
+                </Button>
                 {/* Song Title Wrapper for Marquee */}
                 {/* mr-1 추가하여 버튼과 간격 확보 */}
                 <div className="overflow-hidden whitespace-nowrap flex-grow min-w-0 h-4 mr-1">
@@ -117,7 +137,7 @@ export const Player: React.FC<PlayerProps> = ({
                       <AlertTriangle className="h-3 w-3 mr-1 flex-shrink-0" /> Song Info unavailable
                     </span>
                   ) : (
-                    <span className="truncate">{activeStation.genre}</span>
+                    <span className="truncate">{activeStation.genre}</span> // 노래 정보 없을 때 장르 표시 (기본값)
                   )}
                 </div>
                 {/* Save Button */}
@@ -125,7 +145,7 @@ export const Player: React.FC<PlayerProps> = ({
                   variant="ghost"
                   size="icon"
                   className={cn(
-                    "h-5 w-5 p-0 flex-shrink-0", // 기본 크기
+                    "h-5 w-5 p-0 flex-shrink-0 ml-1", // 마진 조정
                     !canSaveSong && "opacity-30 cursor-not-allowed",
                     showSavedFeedback && "text-primary"
                   )}

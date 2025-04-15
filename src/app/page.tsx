@@ -24,6 +24,7 @@ import {
   Shuffle,
   // Player 컴포넌트로 이동된 아이콘은 여기서 제거해도 됨 (선택적)
   // Play, Pause, SkipForward, SkipBack, Volume2, VolumeX, AlertTriangle, Loader2, Bookmark
+  RefreshCw
 } from 'lucide-react'; // 필요한 아이콘만 남기거나 Player 등에서 가져오도록 수정 가능
 
 
@@ -42,6 +43,7 @@ export default function Home() {
   const [isLoadingSong, setIsLoadingSong] = useState(false);
   const [isSongUnavailable, setIsSongUnavailable] = useState(false);
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
+  const visibilityIntervalRef = useRef<NodeJS.Timeout | null>(null); // 1분 인터벌용 Ref
 
   // Ref
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -86,53 +88,101 @@ export default function Home() {
   // 볼륨 조절
   useEffect(() => { if (audioRef.current) audioRef.current.volume = volume / 100; }, [volume]);
 
-  // --- 현재 곡 정보 주기적 업데이트 ---
+  // --- 현재 곡 정보 업데이트 함수 수정 ---
   const fetchAndUpdateSong = useCallback(async (station: RadioStation | null) => {
     if (!station?.streamUrl) {
-        setCurrentSong(null);
-        setIsLoadingSong(false);
-        setIsSongUnavailable(false);
-        return false;
+        setCurrentSong(null); setIsLoadingSong(false); setIsSongUnavailable(false); return false;
     }
+    // 수동/자동 새로고침 시에도 로딩 상태 표시
+    setIsLoadingSong(true);
     try {
         const song = await getCurrentSong(station.streamUrl);
         if (!song) {
-            setCurrentSong(null);
-            setIsSongUnavailable(true);
-            return false;
+            setCurrentSong(null); setIsSongUnavailable(true); return false;
         }
-        setCurrentSong(song);
-        setIsSongUnavailable(false);
+        // 노래 정보가 실제로 변경되었을 때만 상태 업데이트 및 토스트 표시
+        if (song !== currentSong) {
+            setCurrentSong(song);
+            setIsSongUnavailable(false);
+            toast.success("Song info updated", { description: song }); // 성공 토스트 추가
+        }
         return true;
     } catch (error) {
         console.error("Error fetching song:", error);
-        setCurrentSong(null);
-        setIsSongUnavailable(true);
-        return false;
+        setCurrentSong(null); setIsSongUnavailable(true); return false;
     } finally {
         setIsLoadingSong(false);
     }
-  }, []);
+  // currentSong을 의존성에 추가하여 최신 노래 정보와 비교하도록 함
+  }, [currentSong]);
 
-  // useEffect 수정
+  // --- 재생 시작 시 첫 노래 정보 로드 useEffect ---
+  // (기존 인터벌 로직 제거 후, 첫 호출만 남김)
   useEffect(() => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      if (isPlaying && activeStation) {
-          setIsLoadingSong(true);
-          setIsSongUnavailable(false);
-          setCurrentSong(null);
-          fetchAndUpdateSong(activeStation).then(success => {
-              if (success) {
-                  intervalRef.current = setInterval(() => fetchAndUpdateSong(activeStation), 20000);
-              }
-          });
-      } else {
-          setCurrentSong(null);
-          setIsLoadingSong(false);
-          setIsSongUnavailable(false);
-      }
-      return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+    if (isPlaying && activeStation) {
+      // 재생 시작 시 일단 한 번 가져오기
+      fetchAndUpdateSong(activeStation);
+    } else {
+      // 정지 시 노래 정보 초기화
+      setCurrentSong(null);
+      setIsLoadingSong(false);
+      setIsSongUnavailable(false);
+    }
+    // isPlaying, activeStation 변경 시 실행
   }, [isPlaying, activeStation, fetchAndUpdateSong]);
+
+
+  // --- 탭 활성화 감지 및 1분 자동 업데이트 useEffect ---
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // 탭 숨겨지면 인터벌 클리어
+        if (visibilityIntervalRef.current) {
+          clearInterval(visibilityIntervalRef.current);
+          visibilityIntervalRef.current = null;
+          console.log("Tab hidden, stopping auto-refresh.");
+        }
+      } else {
+        // 탭 다시 보이면 즉시 업데이트 시도 및 1분 인터벌 시작 (재생 중일 때만)
+        console.log("Tab visible.");
+        if (isPlaying && activeStation) {
+          console.log("Fetching song info immediately and starting 1-min interval.");
+          fetchAndUpdateSong(activeStation); // 즉시 실행
+          visibilityIntervalRef.current = setInterval(() => {
+            console.log("Auto-refreshing song info (1 min interval).")
+            fetchAndUpdateSong(activeStation);
+          }, 60000); // 1분 (60 * 1000 ms)
+        }
+      }
+    };
+
+    // 이벤트 리스너 등록
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    console.log("Visibility change listener added.");
+
+    // 컴포넌트 언마운트 또는 isPlaying/activeStation 변경 시 정리
+    return () => {
+      console.log("Removing visibility change listener and clearing interval.");
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (visibilityIntervalRef.current) {
+        clearInterval(visibilityIntervalRef.current);
+        visibilityIntervalRef.current = null;
+      }
+    };
+    // isPlaying, activeStation 상태가 바뀔 때마다 리스너/인터벌 재설정 필요
+  }, [isPlaying, activeStation, fetchAndUpdateSong]);
+
+  // --- 수동 새로고침 핸들러 ---
+  const handleManualRefreshSong = useCallback(() => {
+    if (!activeStation || isLoadingSong) {
+      toast.info("Cannot refresh now", { description: isLoadingSong ? "Already loading..." : "No active station."});
+      return;
+    }
+    console.log("Manual refresh requested.");
+    toast.info("Refreshing song info...");
+    fetchAndUpdateSong(activeStation);
+  }, [activeStation, isLoadingSong, fetchAndUpdateSong]);
+
 
   // --- 핸들러 함수 (useCallback) ---
   const toggleFavorite = useCallback((stationToToggle: RadioStation) => {
@@ -375,6 +425,7 @@ export default function Home() {
         isLoadingSong={isLoadingSong}
         isSongUnavailable={isSongUnavailable}
         onSaveSong={handleSaveSong}
+        onRefreshSong={handleManualRefreshSong} // 새로고침 핸들러 전달
       />
     </div>
   );

@@ -89,32 +89,50 @@ export default function Home() {
   // --- 현재 곡 정보 주기적 업데이트 ---
   const fetchAndUpdateSong = useCallback(async (station: RadioStation | null) => {
     if (!station?.streamUrl) {
-        setCurrentSong(null); setIsLoadingSong(false); setIsSongUnavailable(false); return;
+        setCurrentSong(null);
+        setIsLoadingSong(false);
+        setIsSongUnavailable(false);
+        return false;
     }
     try {
         const song = await getCurrentSong(station.streamUrl);
-        setCurrentSong(prev => song === prev ? prev : (setIsSongUnavailable(!song), song));
+        if (!song) {
+            setCurrentSong(null);
+            setIsSongUnavailable(true);
+            return false;
+        }
+        setCurrentSong(song);
+        setIsSongUnavailable(false);
+        return true;
     } catch (error) {
         console.error("Error fetching song:", error);
-        setCurrentSong(prev => prev === null ? prev : (setIsSongUnavailable(true), null));
+        setCurrentSong(null);
+        setIsSongUnavailable(true);
+        return false;
     } finally {
-        // 초기 로딩 시에만 isLoading 변경 고려 (현재는 매번 false로)
         setIsLoadingSong(false);
     }
   }, []);
 
+  // useEffect 수정
   useEffect(() => {
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    if (isPlaying && activeStation) {
-        setIsLoadingSong(true); setIsSongUnavailable(false); setCurrentSong(null);
-        fetchAndUpdateSong(activeStation); // 즉시 호출
-        intervalRef.current = setInterval(() => fetchAndUpdateSong(activeStation), 20000); // 20초
-    } else {
-        setCurrentSong(null); setIsLoadingSong(false); setIsSongUnavailable(false);
-    }
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (isPlaying && activeStation) {
+          setIsLoadingSong(true);
+          setIsSongUnavailable(false);
+          setCurrentSong(null);
+          fetchAndUpdateSong(activeStation).then(success => {
+              if (success) {
+                  intervalRef.current = setInterval(() => fetchAndUpdateSong(activeStation), 20000);
+              }
+          });
+      } else {
+          setCurrentSong(null);
+          setIsLoadingSong(false);
+          setIsSongUnavailable(false);
+      }
+      return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [isPlaying, activeStation, fetchAndUpdateSong]);
-
 
   // --- 핸들러 함수 (useCallback) ---
   const toggleFavorite = useCallback((stationToToggle: RadioStation) => {

@@ -114,7 +114,7 @@ export const Player: React.FC<PlayerProps> = ({
                     </span>
                   ) : isSongUnavailable ? (
                     <span className="flex items-center text-xs text-yellow-600 dark:text-yellow-500 h-full">
-                      <AlertTriangle className="h-3 w-3 mr-1 flex-shrink-0" /> Info unavailable
+                      <AlertTriangle className="h-3 w-3 mr-1 flex-shrink-0" /> Song Info unavailable
                     </span>
                   ) : (
                     <span className="truncate">{activeStation.genre}</span>

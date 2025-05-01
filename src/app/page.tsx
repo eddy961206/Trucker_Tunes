@@ -27,6 +27,13 @@ import {
   RefreshCw
 } from 'lucide-react'; // 필요한 아이콘만 남기거나 Player 등에서 가져오도록 수정 가능
 
+// HTTP 스트림을 HTTPS로 자동 변환 (가능한 경우)
+function getSafeStreamUrl(url: string) {
+  if (url.startsWith('http://')) {
+    return url.replace('http://', 'https://');
+  }
+  return url;
+}
 
 export default function Home() {
   // --- 상태 관리 ---
@@ -264,44 +271,79 @@ export default function Home() {
 
   const stopStation = useCallback(() => {
     if (audioRef.current) {
-        audioRef.current.pause();
-        setIsPlaying(false);
-        console.log('Audio stopped.');
+      audioRef.current.pause();
+      audioRef.current.src = '';
+      audioRef.current.load();
+      audioRef.current = null;
     }
+    setIsPlaying(false);
+    setIsConnectingStation(false);
   }, []);
 
-  const playStation = useCallback((station: RadioStation, game: Game | null) => {
-    const actualGame = game ?? (ets2Stations.some(s => s.streamUrl === station.streamUrl) ? 'ETS2' : 'ATS');
-    if (audioRef.current) stopStation(); // 기존 재생 중지 (stopStation 호출로 변경)
+// ... existing code ...
+const playStation = useCallback((station: RadioStation, game: Game | null) => {
+  if (isConnectingStation) return;
+  setIsConnectingStation(true);
 
-    setActiveStation(station);
-    setActiveGame(actualGame);
+  stopStation();
 
-    const newAudio = new Audio(station.streamUrl);
-    audioRef.current = newAudio;
-    newAudio.volume = volume / 100;
+  setActiveStation(station);
+  setActiveGame(game ?? (ets2Stations.some(s => s.streamUrl === station.streamUrl) ? 'ETS2' : 'ATS'));
 
-    const errorListener = (e: Event) => {
-        const err = (e.target as HTMLAudioElement).error;
-        console.error('Audio error:', err);
-        toast.error('Stream Error', { description: `Failed to play ${station.name}. Code: ${err?.code}` });
-        stopStation();
-        newAudio.removeEventListener('error', errorListener);
-    };
-    newAudio.addEventListener('error', errorListener);
+  // 1. 무조건 시도하는 스트림 주소 로그
+  console.log('Trying to play:', station.streamUrl);
 
-    newAudio.play()
-        .then(() => {
-            setIsPlaying(true);
-            toast.success('Playing Station', { description: `Now playing: ${station.name}` });
-        })
-        .catch((playError) => {
-            console.error('Failed to play:', playError);
-            toast.error('Playback Error', { description: `Could not start ${station.name}.` });
-            newAudio.removeEventListener('error', errorListener);
-            stopStation();
-        });
-  }, [volume, ets2Stations, stopStation]); // 의존성에 setActiveStation, setActiveGame 등은 직접 상태를 바꾸므로 넣지 않음
+  // ... 이하 기존 코드 ...
+  const safeUrl = station.streamUrl.startsWith('https://') ? station.streamUrl : station.streamUrl;
+
+  const testAudio = document.createElement('audio');
+  if (!testAudio.canPlayType('audio/mpeg') && !testAudio.canPlayType('audio/aac')) {
+    toast.error('Unsupported Format', { description: 'Your browser does not support this audio format.' });
+    setIsConnectingStation(false);
+    // 2. 포맷 미지원도 터미널에 로그
+    console.error('Not supported audio format:', station.streamUrl);
+    return;
+  }
+
+  const newAudio = new Audio(safeUrl);
+  audioRef.current = newAudio;
+  newAudio.volume = volume / 100;
+
+  const errorListener = (e: Event) => {
+    const err = (e.target as HTMLAudioElement).error;
+    if (err?.code === 4) {
+      toast.error('Format Error', { description: 'This station uses an unsupported audio format in your browser.' });
+    } else {
+      toast.error('Stream Error', { description: `Failed to play ${station.name}. Code: ${err?.code}` });
+    }
+    // 3. 에러 발생 시도 주소도 로그
+    console.error('Audio error for:', station.streamUrl, 'Error:', err);
+    stopStation();
+    newAudio.removeEventListener('error', errorListener);
+  };
+
+  newAudio.addEventListener('error', errorListener);
+
+  newAudio.play()
+    .then(() => {
+      setIsPlaying(true);
+      setIsConnectingStation(false);
+      toast.success('Playing Station', { description: `Now playing: ${station.name}` });
+    })
+    .catch((playError) => {
+      if (playError.name === 'NotSupportedError') {
+        toast.error('Not Supported', { description: 'Failed to load because no supported source was found.' });
+      } else {
+        toast.error('Playback Error', { description: `Could not start ${station.name}.` });
+      }
+      setIsConnectingStation(false);
+      setIsPlaying(false);
+      // 4. play() 실패도 주소 로그
+      console.error('Failed to play:', station.streamUrl, playError);
+      newAudio.removeEventListener('error', errorListener);
+      stopStation();
+    });
+}, [volume, ets2Stations, stopStation, isConnectingStation]);
 
   const filterStations = useCallback((stations: RadioStation[]) => stations.filter(station =>
     station.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
